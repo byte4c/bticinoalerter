@@ -1,35 +1,40 @@
 import os
 import socketpool
-import wifi
-
+import wifi 
 import ssl
-import adafruit_requests
+import adafruit_requests 
+import alarm
+import board
 
-# Get WiFi details, ensure these are setup in settings.toml
-ssid = os.getenv("CIRCUITPY_WIFI_SSID")
-password = os.getenv("CIRCUITPY_WIFI_PASSWORD")
+ALERT_URL = "http://192.168.20.10/alert"
 
-# Initialize WiFi Pool (There can be only 1 pool & top of script)
 radio = wifi.radio
 pool = socketpool.SocketPool(radio)
 
-print("Connecting to AP...")
-while not wifi.radio.ipv4_address:
-    try:
-        wifi.radio.connect(ssid, password)
-    except ConnectionError as e:
-        print("could not connect to AP, retrying: ", e)
-print("Connected to", str(radio.ap_info.ssid, "utf-8"), "\tRSSI:", radio.ap_info.rssi)
+def alert(url):
+    print("Connecting to AP...")
+    while not wifi.radio.ipv4_address:
+        try:
+            wifi.radio.connect(os.getenv("CIRCUITPY_WIFI_SSID"), os.getenv("CIRCUITPY_WIFI_PASSWORD"))
+        except ConnectionError as e:
+            print("could not connect to AP, retrying: ", e)
+    print("Connected to", str(radio.ap_info.ssid, "utf-8"), "\tRSSI:", radio.ap_info.rssi)
 
-# Initialize a requests session
-ssl_context = ssl.create_default_context()
-requests = adafruit_requests.Session(pool, ssl_context)
+    ssl_context = ssl.create_default_context()
+    requests = adafruit_requests.Session(pool, ssl_context)
 
-TEXT_URL = "http://192.168.20.10/alert"
+    print("-" * 40)
+    print("Fetching text from %s" % url)
+    response = requests.get(url)
+    print("Text Response: ", response.text)
+    print("-" * 40)
+    response.close()
 
-print("-" * 40)
-print("Fetching text from %s" % TEXT_URL)
-response = requests.get(TEXT_URL)
-print("Text Response: ", response.text)
-print("-" * 40)
-response.close()
+# Print out which alarm woke us up, if any.
+print(alarm.wake_alarm)
+
+print("Starting program")
+alert(ALERT_URL)
+
+pin_alarm = alarm.pin.PinAlarm(pin=board.D0, value=False, pull=True)
+alarm.exit_and_deep_sleep_until_alarms(pin_alarm)
