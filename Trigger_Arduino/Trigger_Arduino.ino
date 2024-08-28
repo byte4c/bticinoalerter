@@ -1,6 +1,7 @@
 #include "WiFi.h"
 
-const int led = D7;
+const int batMon = A2;
+const int led = D3;
 const char* ssid = "Lima1R-IoT";
 const char* password = "JfbtCHy77Pv3aYQicNmdC3CfPpFxxiYJ";
 const char* host = "192.168.20.10";
@@ -22,6 +23,14 @@ void print_wakeup_reason() {
     case ESP_SLEEP_WAKEUP_GPIO : Serial.println("Wakeup caused by GPOI"); break;
     default : Serial.printf("Wakeup was not caused by deep sleep: %d\n",wakeup_reason); break;
   }
+}
+void print_bat() {
+  uint32_t Vbatt = 0;
+  for(int i = 0; i < 16; i++) {
+    Vbatt = Vbatt + analogReadMilliVolts(batMon); // ADC with correction   
+  }
+  float Vbattf = 2 * Vbatt / 16 / 1000.0;     // attenuation ratio 1/2, mV --> V
+  Serial.println(Vbattf, 3);
 }
 int readResponse(NetworkClient *client) {
   unsigned long timeout = millis();
@@ -63,11 +72,13 @@ void alert() {
 }
 
 void setup() {
+  pinMode(batMon, INPUT);
   pinMode(led, OUTPUT);
   digitalWrite(led, HIGH);
   Serial.begin(115200);
   delay(1000); //Take some time to open up the Serial Monitor
   print_wakeup_reason();
+  print_bat();
   
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
