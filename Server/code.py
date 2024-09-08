@@ -7,10 +7,7 @@ import os
 import socketpool
 import wifi
 
-from adafruit_httpserver.mime_type import MIMEType
-from adafruit_httpserver.request import HTTPRequest
-from adafruit_httpserver.response import HTTPResponse
-from adafruit_httpserver.server import HTTPServer
+from adafruit_httpserver import Server, Request, Response, FileResponse
 
 ALERTTRIGGERED = False
 ALERTSTATUS = 0 # 0=OFF 1=STANDBY 2=ON
@@ -33,6 +30,18 @@ def show_color(color: tuple[int, int, int], duration: int, reset: bool = True):
         pixels.fill(0)
         pixels.show()
 
+def handle_battery(battery: any):
+    print("Battery: ", "{}, {}\n".format(time.time(), battery))
+    try:
+        with open("/battery.txt", "a") as sdc:
+            sdc.write("{}, {}\n".format(time.time(), battery))
+    except OSError as e:
+        print(e)
+        pass
+    except RuntimeError as e:
+        print(e)
+        pass
+
 button = digitalio.DigitalInOut(PINBUTTON)
 button.direction = digitalio.Direction.INPUT
 button.pull = digitalio.Pull.UP
@@ -42,41 +51,42 @@ wifi.radio.connect(os.getenv("CIRCUITPY_WIFI_SSID"), os.getenv("CIRCUITPY_WIFI_P
 print("Connected to ", os.getenv("CIRCUITPY_WIFI_SSID"))
 
 pool = socketpool.SocketPool(wifi.radio)
-server = HTTPServer(pool)
+server = Server(pool)
 
 @server.route("/alert")
-def alert_handler(request: HTTPRequest):
+def alert_handler(request: Request):
     print("Recieved alert message: ", request.body.decode())
+    handle_battery(request.query_params.get('battery'))
     global ALERTTRIGGERED
     ALERTTRIGGERED = True
     global ALERTSTATUS
     if ALERTSTATUS != 0:
         ALERTSTATUS = 2
         global LASTALERT
-        LASTALERT = time.monotonic();
-        with HTTPResponse(request, content_type=MIMEType.TYPE_TXT) as response:
-            response.send(f"Alert recieved! ({request.body.decode()})")
+        LASTALERT = time.monotonic()
+        return Response(request, f"Alert recieved! ({request.body.decode()})")
     else:
-        with HTTPResponse(request, content_type=MIMEType.TYPE_TXT) as response:
-            response.send(f"Alert ignored. ({request.body.decode()})")
+        return Response(request, f"Alert ignored. ({request.body.decode()})")
 
 @server.route("/status")
-def status_handler(request: HTTPRequest):
+def status_handler(request: Request):
     print("Recieved status request")
     global ALERTSTATUS
     if ALERTSTATUS == 0:
-        with HTTPResponse(request, content_type=MIMEType.TYPE_TXT) as response:
-            response.send(f"Status: OFF")
+        return Response(request, f"Status: OFF")
     elif ALERTSTATUS == 1:
-        with HTTPResponse(request, content_type=MIMEType.TYPE_TXT) as response:
-            response.send(f"Status: STANDBY")
+        return Response(request, f"Status: STANDBY")
     elif ALERTSTATUS == 2:
-        with HTTPResponse(request, content_type=MIMEType.TYPE_TXT) as response:
-            response.send(f"Status: ALERT")
+        return Response(request, f"Status: ALERT")
+
+@server.route("/battery")
+def battery_handler(request: Request):
+    print("Recieved battery request")
+    return FileResponse(request, filename='battery.txt', root_path='/')
 
 print("starting server..")
 try:
-    server.start(str(wifi.radio.ipv4_address))
+    server.start(str(wifi.radio.ipv4_address), 80)
     print(f"Listening on http://{wifi.radio.ipv4_address}:80")
 except OSError:
     time.sleep(5)

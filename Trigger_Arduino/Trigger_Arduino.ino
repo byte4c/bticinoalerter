@@ -24,14 +24,17 @@ void print_wakeup_reason() {
     default : Serial.printf("Wakeup was not caused by deep sleep: %d\n",wakeup_reason); break;
   }
 }
-void print_bat() {
+
+float readBattery() {
   uint32_t Vbatt = 0;
   for(int i = 0; i < 16; i++) {
     Vbatt = Vbatt + analogReadMilliVolts(batMon); // ADC with correction   
   }
-  float Vbattf = 2 * Vbatt / 16 / 1000.0;     // attenuation ratio 1/2, mV --> V
-  Serial.println(Vbattf, 3);
+  float battery = 2 * Vbatt / 16 / 1000.0;     // attenuation ratio 1/2, mV --> V
+  Serial.println(battery, 3);
+  return battery;
 }
+
 int readResponse(NetworkClient *client) {
   unsigned long timeout = millis();
   while (client->available() == 0) {
@@ -51,14 +54,14 @@ int readResponse(NetworkClient *client) {
   Serial.printf("\nClosing connection\n\n");
   return 1;
 }
-void alert() {
+void alert(float battery) {
   for (int i = 0; i < 5; i++) {
     NetworkClient client;
     if (!client.connect(host, httpPort)) {
       continue;
     }
 
-    client.println("GET /alert HTTP/1.1");
+    client.println("GET /alert?battery=" + String(battery) + " HTTP/1.1");
     client.println("Host: " + String(host));
     client.println("Connection: close");
     client.println();  // end HTTP header
@@ -78,7 +81,6 @@ void setup() {
   Serial.begin(115200);
   delay(1000); //Take some time to open up the Serial Monitor
   print_wakeup_reason();
-  print_bat();
   
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
@@ -86,7 +88,9 @@ void setup() {
     Serial.print(".");
   }
   Serial.printf("\nConnected\n\n");
-  alert();
+  
+  float battery = readBattery();
+  alert(battery);
 
   esp_deep_sleep_enable_gpio_wakeup((BIT(D0)|BIT(D1)), ESP_GPIO_WAKEUP_GPIO_HIGH);
 
