@@ -35,6 +35,19 @@ def handle_battery(battery: any):
     try:
         with open("/battery.txt", "a") as sdc:
             sdc.write("{}, {}\n".format(time.time(), battery))
+            sdc.close()
+    except OSError as e:
+        print(e)
+        pass
+    except RuntimeError as e:
+        print(e)
+        pass
+
+def handle_battery_reset():
+    try:
+        with open("/battery.txt", "w") as sdc:
+            sdc.write("Reset at {}\n".format(time.time()))
+            sdc.close()
     except OSError as e:
         print(e)
         pass
@@ -83,6 +96,12 @@ def status_handler(request: Request):
 def battery_handler(request: Request):
     print("Recieved battery request")
     return FileResponse(request, filename='battery.txt', root_path='/')
+
+@server.route("/battery/clear")
+def battery_reset_handler(request: Request):
+    print("Recieved battery reset request")
+    handle_battery_reset()
+    return Response(request, f"Battery file cleared")
 
 print("starting server..")
 try:
